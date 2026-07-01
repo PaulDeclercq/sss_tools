@@ -30,10 +30,10 @@ jobs:
         run: python check_rss.py
 
       - name: Read latest URL
-        run: echo "LATEST_URL=$(cat latest_url.txt)" >> $GITHUB_ENV
+        run: echo "LATEST_URL=$(cat latest_url_news.txt)" >> $GITHUB_ENV
 
       - name: Read new item flag
-        run: echo "NEW_ITEM=$(cat new_item.txt)" >> $GITHUB_ENV
+        run: echo "NEW_ITEM=$(cat new_item_news.txt)" >> $GITHUB_ENV
 
       - name: Generate image
         if: env.NEW_ITEM == 'yes'
@@ -58,6 +58,6 @@ jobs:
       - name: Commit and push
         if: success()
         run: |
-          git add last_seen.txt latest_url.txt new_item.txt
+          git add last_seen_news.txt latest_url_news.txt new_item_news.txt
           git commit -m "Update last seen feed item" || exit 0
           git push
