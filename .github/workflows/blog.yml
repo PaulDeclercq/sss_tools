@@ -45,8 +45,8 @@ jobs:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           curl -X POST \
-            -F 'payload_json={"content":"New blog post detected. Latest post: $LATEST_URL"}' \
-            -F 'file1=@output/instagram_blog_latest.png' \
+            -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL\"}" \
+            -F 'file1=@output/instagram_story_blog.png' \
             "$WEBHOOK_URL"
 
       - name: Configure git
