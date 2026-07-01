@@ -1,4 +1,4 @@
-name: RSS-triggered story image
+name: RSS-triggered NEWS story image
 
 on:
   schedule:
