@@ -68,4 +68,4 @@ def parse_article(url):
             date = meta_date["content"]
 
     image_url = None
-    ogimg = soup.find("m
+    ogimg = soup.find("meta", attrs={"property": "og:image"})
