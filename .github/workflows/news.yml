@@ -33,14 +33,14 @@ jobs:
         run: echo "LATEST_URL=$(cat latest_url_news.txt)" >> $GITHUB_ENV
 
       - name: Read new item flag
-        run: echo "NEW_ITEM=$(cat new_item_news.txt)" >> $GITHUB_ENV
+        run: echo "NEW_ITEM_NEWS=$(cat new_item_news.txt)" >> $GITHUB_ENV
 
       - name: Generate image
-        if: env.NEW_ITEM == 'yes'
+        if: env.NEW_ITEM_NEWS == 'yes'
         run: python instagram_story_news.py
 
       - name: Send to Discord
-        if: env.NEW_ITEM == 'yes'
+        if: env.NEW_ITEM_NEWS == 'yes'
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
