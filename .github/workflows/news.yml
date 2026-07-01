@@ -29,7 +29,7 @@ jobs:
       - name: Check blog RSS
         run: python check_rss.py
 
-      - name: Read latest URL NEWS
+      - name: Read latest URL news
         run: echo "LATEST_URL_NEWS=$(cat latest_url_news.txt)" >> $GITHUB_ENV
 
       - name: Read new item news flag
