@@ -151,7 +151,7 @@ def main():
 
     draw = ImageDraw.Draw(canvas)
     date_font = load_font(64, bold=False)
-    title_font = load_font(74, bold=True)
+    title_font = load_font(70, bold=True)
 
     date_bbox = draw.textbbox((0, 0), date, font=date_font)
     date_x = (W - (date_bbox[2] - date_bbox[0])) // 2
