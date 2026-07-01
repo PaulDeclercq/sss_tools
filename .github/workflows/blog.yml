@@ -46,3 +46,14 @@ jobs:
             -F "payload_json={\"content\":\"New RSS item detected. Latest post: $LATEST_URL\"}" \
             -F "file1=@output/instagram_blog_latest.png" \
             "$WEBHOOK_URL"
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push
+        run: |
+          git add last_seen.txt latest_url.txt
+          git commit -m "Update last seen feed item" || exit 0
+          git push
+            
