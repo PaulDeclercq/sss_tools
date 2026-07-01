@@ -30,21 +30,23 @@ jobs:
         run: python check_blog.py
 
       - name: Read latest URL
-        if: hashFiles('new_item.txt') != '' && success()
         run: echo "LATEST_URL=$(cat latest_url.txt)" >> $GITHUB_ENV
 
+      - name: Read new item flag
+        run: echo "NEW_ITEM=$(cat new_item.txt)" >> $GITHUB_ENV
+
       - name: Generate image
-        if: hashFiles('new_item.txt') != '' && success()
+        if: env.NEW_ITEM == 'yes'
         run: python instagram_story_blog.py
 
       - name: Send to Discord
-        if: hashFiles('new_item.txt') != '' && success()
+        if: env.NEW_ITEM == 'yes'
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           curl -X POST \
-            -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL\"}" \
-            -F "file1=@output/instagram_story_blog.png" \
+            -F 'payload_json={"content":"New blog post detected. Latest post: $LATEST_URL"}' \
+            -F 'file1=@output/instagram_story_blog.png' \
             "$WEBHOOK_URL"
 
       - name: Configure git
