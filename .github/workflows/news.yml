@@ -1,9 +1,12 @@
-name: RSS-triggered NEWS story image
+name: RSS-triggered BLOG story image
 
 on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run:
@@ -13,7 +16,7 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -23,26 +26,38 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Check RSS
-        id: rss
+      - name: Check blog RSS
         run: python check_rss.py
 
-      - name: Generate image
-        if: success()
-        env:
-          LATEST_URL: ${{ env.LATEST_URL }}
-        run: python instagram_story_news.py
-
       - name: Read latest URL
-        if: success()
         run: echo "LATEST_URL=$(cat latest_url.txt)" >> $GITHUB_ENV
 
+      - name: Read new item flag
+        run: echo "NEW_ITEM=$(cat new_item.txt)" >> $GITHUB_ENV
+
+      - name: Generate image
+        if: env.NEW_ITEM == 'yes'
+        run: python instagram_story_news.py
+
       - name: Send to Discord
-        if: success()
+        if: env.NEW_ITEM == 'yes'
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           curl -X POST \
-            -F "payload_json={\"content\":\"New RSS item detected. Latest post: $LATEST_URL\"}" \
-            -F "file1=@output/instagram_news_latest.png" \
+            -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL\"}" \
+            -F 'file1=@output/instagram_news_latest.png' \
             "$WEBHOOK_URL"
+
+      - name: Configure git
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push
+        if: success()
+        run: |
+          git add last_seen.txt latest_url.txt new_item.txt
+          git commit -m "Update last seen feed item" || exit 0
+          git push
