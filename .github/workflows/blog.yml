@@ -31,7 +31,7 @@ jobs:
         if: success()
         env:
           LATEST_URL: ${{ env.LATEST_URL }}
-        run: python instagram_blog_news.py
+        run: python instagram_story_blog.py
 
       - name: Read latest URL
         if: success()
