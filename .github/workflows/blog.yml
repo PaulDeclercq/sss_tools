@@ -46,7 +46,7 @@ jobs:
         run: |
           curl -X POST \
             -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL\"}" \
-            -F 'file1=@output/instagram_story_blog.png' \
+            -F 'file1=@output/instagram_blog_latest.png' \
             "$WEBHOOK_URL"
 
       - name: Configure git
