@@ -5,9 +5,9 @@ import requests
 from bs4 import BeautifulSoup
 
 FEED_URL = "https://www.slowspinsociety.com/news-rodeo/?format=rss"
-LAST_SEEN = Path("last_seen.txt")
-LATEST_URL_FILE = Path("latest_url.txt")
-NEW_ITEM_FILE = Path("new_item.txt")
+LAST_SEEN = Path("last_seen_news.txt")
+LATEST_URL_FILE = Path("latest_url_news.txt")
+NEW_ITEM_FILE = Path("new_item_news.txt")
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
