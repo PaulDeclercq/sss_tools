@@ -44,5 +44,5 @@ jobs:
         run: |
           curl -X POST \
             -F "payload_json={\"content\":\"New RSS item detected. Latest post: $LATEST_URL\"}" \
-            -F "file1=@output/instagram_story_latest.png" \
+            -F "file1=@output/instagram_news_latest.png" \
             "$WEBHOOK_URL"
