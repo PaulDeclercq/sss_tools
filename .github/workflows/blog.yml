@@ -1,4 +1,4 @@
-name: Blog checker
+name: RSS-triggered BLOG story image
 
 on:
   schedule:
@@ -6,17 +6,43 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-blog:
+  run:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run blog script
+      - name: Check RSS
+        id: rss
         run: python check_blog.py
+
+      - name: Generate image
+        if: success()
+        env:
+          LATEST_URL: ${{ env.LATEST_URL }}
+        run: python instagram_blog_news.py
+
+      - name: Read latest URL
+        if: success()
+        run: echo "LATEST_URL=$(cat latest_url.txt)" >> $GITHUB_ENV
+
+      - name: Send to Discord
+        if: success()
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          curl -X POST \
+            -F "payload_json={\"content\":\"New RSS item detected. Latest post: $LATEST_URL\"}" \
+            -F "file1=@output/instagram_blog_latest.png" \
+            "$WEBHOOK_URL"
