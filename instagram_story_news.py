@@ -13,7 +13,7 @@ FEED_URL = "https://www.slowspinsociety.com/news-rodeo/?format=rss"
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = SCRIPT_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
-OUT_FILE = OUTPUT_DIR / "instagram_story_latest.png"
+OUT_FILE = OUTPUT_DIR / "instagram_news_latest.png"
 
 W, H = 1080, 1920
 TOP_X = 64
