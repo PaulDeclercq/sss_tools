@@ -29,10 +29,10 @@ jobs:
       - name: Check blog RSS
         run: python check_rss.py
 
-      - name: Read latest URL
-        run: echo "LATEST_URL=$(cat latest_url_news.txt)" >> $GITHUB_ENV
+      - name: Read latest URL NEWS
+        run: echo "LATEST_URL_NEWS=$(cat latest_url_news.txt)" >> $GITHUB_ENV
 
-      - name: Read new item flag
+      - name: Read new item news flag
         run: echo "NEW_ITEM_NEWS=$(cat new_item_news.txt)" >> $GITHUB_ENV
 
       - name: Generate image
@@ -45,7 +45,7 @@ jobs:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
         run: |
           curl -X POST \
-            -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL\"}" \
+            -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL_NEWS\"}" \
             -F 'file1=@output/instagram_news_latest.png' \
             "$WEBHOOK_URL"
 
