@@ -158,7 +158,7 @@ def main():
     date_y = 1100
     draw.text((date_x, date_y), date, fill=TEXT, font=date_font)
 
-    max_text_width = 800
+    max_text_width = 1000
     lines = wrap_title(title, title_font, draw, max_text_width)
     if len(lines) > 4:
         lines = lines[:4]
