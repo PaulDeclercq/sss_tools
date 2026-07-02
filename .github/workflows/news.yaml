@@ -2,7 +2,7 @@ name: RSS-triggered NEWS story image
 
 on:
   schedule:
-      - cron: "37 * * * *"
+    - cron: "37 * * * *"
   workflow_dispatch:
 
 permissions:
