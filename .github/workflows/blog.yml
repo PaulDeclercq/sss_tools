@@ -1,4 +1,4 @@
-"""name: RSS-triggered BLOG story image
+name: RSS-triggered BLOG story image
 on:
   schedule:
     - cron: "9 * * * *"
@@ -48,4 +48,3 @@ jobs:
           git add last_seen.txt latest_url.txt new_item.txt
           git commit -m "Update last seen feed item" || exit 0
           git push
-"""
