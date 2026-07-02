@@ -2,7 +2,7 @@ name: RSS-triggered BLOG story image
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+      - cron: "37 * * * *"
   workflow_dispatch:
 
 permissions:
