@@ -1,44 +1,33 @@
-name: RSS-triggered BLOG story image
-
+"""name: RSS-triggered BLOG story image
 on:
   schedule:
-      - cron: "37 * * * *"
+    - cron: "9 * * * *"
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
       - name: Check blog RSS
         run: python check_blog.py
-
       - name: Read latest URL
         run: echo "LATEST_URL=$(cat latest_url.txt)" >> $GITHUB_ENV
-
       - name: Read new item flag
         run: echo "NEW_ITEM=$(cat new_item.txt)" >> $GITHUB_ENV
-
       - name: Generate image
         if: env.NEW_ITEM == 'yes'
         run: python instagram_story_blog.py
-
       - name: Send to Discord
         if: env.NEW_ITEM == 'yes'
         env:
@@ -48,16 +37,15 @@ jobs:
             -F "payload_json={\"content\":\"New blog post detected. Latest post: $LATEST_URL\"}" \
             -F 'file1=@output/instagram_blog_latest.png' \
             "$WEBHOOK_URL"
-
       - name: Configure git
         if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Commit and push
         if: success()
         run: |
           git add last_seen.txt latest_url.txt new_item.txt
           git commit -m "Update last seen feed item" || exit 0
           git push
+"""
