@@ -1,4 +1,4 @@
-name: RSS-triggered NEWS story image
+name: NEWS Re-dispatch
 
 on:
   workflow_dispatch:
