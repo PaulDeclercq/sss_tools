@@ -1,0 +1,38 @@
+name: BLOG Re-dispatch
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check blog RSS
+        run: python check_blog.py
+
+      - name: Read latest URL
+        run: echo "LATEST_URL=$(cat latest_url.txt)" >> $GITHUB_ENV
+
+      - name: Generate image
+        run: python instagram_story_blog.py
+
+      - name: Send to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          curl -X POST \
+            -F "payload_json={\"content\":\"Manual BLOG run. Latest post: $LATEST_URL\"}" \
+            -F 'file1=@output/instagram_blog_latest.png' \
+            "$WEBHOOK_URL"
