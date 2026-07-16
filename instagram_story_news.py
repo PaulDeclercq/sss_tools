@@ -4,31 +4,56 @@ from io import BytesIO
 from urllib.parse import urljoin
 import os
 from datetime import datetime
+
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 BLOG_URL = "https://www.slowspinsociety.com/news-rodeo"
 FEED_URL = "https://www.slowspinsociety.com/news-rodeo/?format=rss"
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = SCRIPT_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 OUT_FILE = OUTPUT_DIR / "instagram_news_latest.png"
 
 W, H = 1080, 1920
-TOP_X = 64
-TOP_Y = 190
-TOP_W = 952
-TOP_H = 870
-BG = "#a7a6a1"
-TEXT = "#ffffff"
+
+SAFE_TOP = 220
+SAFE_BOTTOM = 220
+SIDE_PAD = 72
+
+HERO_X = 64
+HERO_Y = 220
+HERO_W = 952
+HERO_H = 860
+HERO_RADIUS = 36
+
+CONTENT_X = 84
+CONTENT_W = W - CONTENT_X * 2
+
+WHITE = (255, 255, 255)
+BLACK = (43, 32, 24)
+
+TEXT = (43, 32, 24)
+MUTED = (110, 88, 72)
+
+ACCENT = (94, 75, 64)  # #5E4B40
+ACCENT_SOFT = (232, 224, 218)  # soft warm beige
+STICKER_BG = (246, 241, 237)  # warm off-white
+STICKER_BORDER = (196, 180, 170)  # muted taupe border
+
+BG_BLUR = 36
+BG_DARKEN = (245, 240, 234, 176)
+
+CTA_TEXT = "Read the full article"
 
 
 def get(url, xml=False):
     headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers, timeout=30)
-    r.raise_for_status()
-    return BeautifulSoup(r.text, "xml" if xml else "html.parser")
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, "xml" if xml else "html.parser")
 
 
 def first_article_url():
@@ -41,24 +66,30 @@ def first_article_url():
         pass
 
     soup = get(BLOG_URL)
-    articles = soup.select('a[href^="/news-rodeo/"]')
-    for a in articles:
+    for a in soup.select("a[href]"):
         href = a.get("href", "")
         text = a.get_text(" ", strip=True)
-        if text and text != "Read More":
+        if not href or not text:
+            continue
+        if "/news-rodeo/" in href and text != "Read More":
             return urljoin(BLOG_URL, href)
+
     raise RuntimeError("Could not find latest article link")
 
 
 def parse_article(url):
     soup = get(url)
+
     title = None
     h1 = soup.find("h1")
     if h1:
         title = h1.get_text(" ", strip=True)
     if not title:
         og = soup.find("meta", attrs={"property": "og:title"})
-        title = og["content"].strip() if og and og.get("content") else "Untitled"
+        if og and og.get("content"):
+            title = og["content"].strip()
+    if not title:
+        title = "Untitled"
 
     date = ""
     time_tag = soup.find("time")
@@ -84,22 +115,29 @@ def parse_article(url):
 def format_date(date_str):
     if not date_str:
         return ""
+
     try:
         dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        return dt.strftime("%-m/%-d/%y")
+        return dt.strftime("%b %-d")
     except Exception:
-        try:
-            dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
-            return dt.strftime("%-m/%-d/%y")
-        except Exception:
-            return date_str
+        pass
+
+    try:
+        dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
+        return dt.strftime("%b %-d")
+    except Exception:
+        return date_str
 
 
 def load_font(size, bold=False):
     candidates = [
         "/Library/Fonts/Arial Bold.ttf" if bold else "/Library/Fonts/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+        if bold
+        else "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if bold
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -110,68 +148,263 @@ def load_font(size, bold=False):
 def fit_cover(img, target_w, target_h):
     src_w, src_h = img.size
     scale = max(target_w / src_w, target_h / src_h)
-    new_w, new_h = int(src_w * scale), int(src_h * scale)
-    img = img.resize((new_w, new_h), Image.LANCZOS)
+    new_w = int(src_w * scale)
+    new_h = int(src_h * scale)
+    resized = img.resize((new_w, new_h), Image.LANCZOS)
     left = (new_w - target_w) // 2
     top = (new_h - target_h) // 2
-    return img.crop((left, top, left + target_w, top + target_h))
+    return resized.crop((left, top, left + target_w, top + target_h))
 
 
-def wrap_title(text, font, draw, max_width):
+def build_background_from_image(hero):
+    bg = (
+        fit_cover(hero, W, H)
+        .filter(ImageFilter.GaussianBlur(radius=BG_BLUR))
+        .convert("RGBA")
+    )
+    overlay = Image.new("RGBA", (W, H), BG_DARKEN)
+    bg.alpha_composite(overlay)
+    return bg.convert("RGB")
+
+
+def download_image(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    return Image.open(BytesIO(response.content)).convert("RGB")
+
+
+def rounded_mask(size, radius):
+    mask = Image.new("L", size, 0)
+    d = ImageDraw.Draw(mask)
+    d.rounded_rectangle((0, 0, size[0], size[1]), radius=radius, fill=255)
+    return mask
+
+
+def add_hero_with_shadow(base, hero, x, y, radius=36):
+    shadow = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shadow)
+    sd.rounded_rectangle(
+        (x, y + 12, x + hero.width, y + hero.height + 12),
+        radius=radius,
+        fill=(0, 0, 0, 85),
+    )
+    shadow = shadow.filter(ImageFilter.GaussianBlur(28))
+    base = Image.alpha_composite(base.convert("RGBA"), shadow)
+
+    hero_rgba = hero.convert("RGBA")
+    mask = rounded_mask(hero.size, radius)
+    hero_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    hero_layer.paste(hero_rgba, (x, y), mask)
+    base = Image.alpha_composite(base, hero_layer)
+    return base.convert("RGB")
+
+
+def add_hero_gradients(hero):
+    hero = hero.convert("RGBA")
+    overlay = Image.new("RGBA", hero.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+
+    top_h = int(hero.height * 0.22)
+    bottom_h = int(hero.height * 0.28)
+
+    for i in range(top_h):
+        alpha = int(120 * (1 - i / max(1, top_h)))
+        d.rectangle((0, i, hero.width, i + 1), fill=(0, 0, 0, alpha))
+
+    for i in range(bottom_h):
+        alpha = int(175 * (i / max(1, bottom_h)))
+        y = hero.height - bottom_h + i
+        d.rectangle((0, y, hero.width, y + 1), fill=(0, 0, 0, alpha))
+
+    hero = Image.alpha_composite(hero, overlay)
+    return hero.convert("RGB")
+
+
+def smart_split_title(title):
+    title = " ".join(title.split())
+    if len(title) <= 46:
+        return title, ""
+
+    separators = [" – ", " — ", ": ", " | ", ", "]
+    for sep in separators:
+        if sep in title:
+            left, right = title.split(sep, 1)
+            if 18 <= len(left) <= 50:
+                return left.strip(), right.strip()
+
+    words = title.split()
+    if len(words) <= 4:
+        return title, ""
+
+    kicker = " ".join(words[:3])
+    main = " ".join(words[3:])
+    return kicker, main
+
+
+def wrap_text(draw, text, font, max_width, max_lines=None):
     words = text.split()
     lines = []
     current = ""
+
     for word in words:
-        test = word if not current else current + " " + word
-        if draw.textbbox((0, 0), test, font=font)[2] <= max_width:
+        test = word if not current else f"{current} {word}"
+        bbox = draw.textbbox((0, 0), test, font=font)
+        width = bbox[2] - bbox[0]
+        if width <= max_width:
             current = test
         else:
             if current:
                 lines.append(current)
             current = word
+
     if current:
         lines.append(current)
+
+    if max_lines and len(lines) > max_lines:
+        lines = lines[:max_lines]
+        while True:
+            candidate = lines[-1] if lines[-1].endswith("...") else lines[-1] + "..."
+            bbox = draw.textbbox((0, 0), candidate, font=font)
+            if bbox[2] - bbox[0] <= max_width:
+                lines[-1] = candidate
+                break
+            trimmed = lines[-1].rsplit(" ", 1)[0]
+            if trimmed == lines[-1] or not trimmed:
+                lines[-1] = candidate
+                break
+            lines[-1] = trimmed
+
     return lines
+
+
+def draw_text_shadow(draw, xy, text, font, fill, shadow=(0, 0, 0), offset=2):
+    x, y = xy
+    draw.text((x + offset, y + offset), text, font=font, fill=shadow)
+    draw.text((x, y), text, font=font, fill=fill)
+
+
+def draw_pill(draw, xy, text, font, bg, fg, pad_x=24, pad_y=14, radius=24):
+    x, y = xy
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    w = tw + pad_x * 2
+    h = th + pad_y * 2
+    draw.rounded_rectangle((x, y, x + w, y + h), radius=radius, fill=bg)
+    draw.text((x + pad_x, y + pad_y - 3), text, font=font, fill=fg)
+    return w, h
+
+
+def draw_link_placeholder(draw, x, y, w, h):
+    draw.rounded_rectangle(
+        (x, y, x + w, y + h),
+        radius=30,
+        fill=STICKER_BG,
+        outline=STICKER_BORDER,
+        width=3,
+    )
+    chain_r = 20
+    cy = y + h // 2
+    cx1 = x + 58
+    cx2 = x + 88
+    draw.ellipse(
+        (cx1 - chain_r, cy - chain_r, cx1 + chain_r, cy + chain_r),
+        outline=(120, 120, 120),
+        width=4,
+    )
+    draw.ellipse(
+        (cx2 - chain_r, cy - chain_r, cx2 + chain_r, cy + chain_r),
+        outline=(120, 120, 120),
+        width=4,
+    )
 
 
 def main():
     article_url = first_article_url()
-    title, date, image_url = parse_article(article_url)
-    date = format_date(date)
+    title, date_str, image_url = parse_article(article_url)
+    date = format_date(date_str)
 
     if image_url:
-        img_data = requests.get(image_url, timeout=30, headers={"User-Agent": "Mozilla/5.0"}).content
-        hero = Image.open(BytesIO(img_data)).convert("RGB")
+        hero = download_image(image_url)
     else:
-        hero = Image.new("RGB", (TOP_W, TOP_H), (220, 220, 220))
+        hero = Image.new("RGB", (HERO_W, HERO_H), (220, 220, 220))
 
-    hero = fit_cover(hero, TOP_W, TOP_H)
-    canvas = Image.new("RGB", (W, H), BG)
-    canvas.paste(hero, (TOP_X, TOP_Y))
+    background = build_background_from_image(hero)
+    hero_fg = fit_cover(hero, HERO_W, HERO_H)
+    hero_fg = add_hero_gradients(hero_fg)
+
+    canvas = background.copy()
+    canvas = add_hero_with_shadow(canvas, hero_fg, HERO_X, HERO_Y, HERO_RADIUS)
 
     draw = ImageDraw.Draw(canvas)
-    date_font = load_font(64, bold=False)
-    title_font = load_font(70, bold=True)
 
-    date_bbox = draw.textbbox((0, 0), date, font=date_font)
-    date_x = (W - (date_bbox[2] - date_bbox[0])) // 2
-    date_y = 1100
-    draw.text((date_x, date_y), date, fill=TEXT, font=date_font)
+    site_font = load_font(34, bold=True)
+    date_font = load_font(42, bold=True)
+    kicker_font = load_font(40, bold=False)
+    title_font = load_font(78, bold=True)
+    cta_font = load_font(44, bold=True)
 
-    max_text_width = 1000
-    lines = wrap_title(title, title_font, draw, max_text_width)
-    if len(lines) > 4:
-        lines = lines[:4]
-    line_height = 82
-    title_y = 1200
+    kicker = "JUST PUBLISHED"
+    _, main_title = smart_split_title(title)
+    if not main_title:
+        main_title = title
 
-    for i, line in enumerate(lines):
+    title_lines = wrap_text(draw, main_title, title_font, CONTENT_W, max_lines=3)
+
+    if date:
+        date_y = HERO_Y + HERO_H - 120
+        draw_text_shadow(
+            draw,
+            (CONTENT_X + 22, date_y),
+            date.upper(),
+            date_font,
+            WHITE,
+            shadow=(0, 0, 0),
+        )
+
+    text_y = HERO_Y + HERO_H + 60
+
+    kicker_bbox = draw.textbbox((0, 0), kicker.upper(), font=kicker_font)
+    kicker_h = kicker_bbox[3] - kicker_bbox[1]
+    draw.text((CONTENT_X, text_y), kicker.upper(), font=kicker_font, fill=ACCENT)
+    text_y += kicker_h + 24
+
+    line_gap = 18
+    for line in title_lines:
         bbox = draw.textbbox((0, 0), line, font=title_font)
-        x = (W - (bbox[2] - bbox[0])) // 2
-        y = title_y + i * line_height
-        draw.text((x, y), line, fill=TEXT, font=title_font)
+        lh = bbox[3] - bbox[1]
+        draw.text((CONTENT_X, text_y), line, font=title_font, fill=TEXT)
+        text_y += lh + line_gap
+
+    bottom_safe_y = H - SAFE_BOTTOM
+
+    sticker_w = 620
+    sticker_h = 120
+    cta_gap = 26
+
+    cta_measure_bbox = draw.textbbox((0, 0), CTA_TEXT, font=cta_font)
+    cta_text_h = cta_measure_bbox[3] - cta_measure_bbox[1]
+    cta_h = cta_text_h + 18 * 2
+
+    sticker_y = bottom_safe_y - sticker_h
+    cta_y = sticker_y - cta_gap - cta_h
+
+    draw_pill(
+        draw,
+        (CONTENT_X, cta_y),
+        CTA_TEXT,
+        cta_font,
+        ACCENT,
+        WHITE,
+        pad_x=28,
+        pad_y=18,
+        radius=30,
+    )
+    draw_link_placeholder(draw, CONTENT_X, sticker_y, sticker_w, sticker_h)
 
     canvas.save(OUT_FILE, quality=95)
+
     print(f"Saved to {OUT_FILE}")
     print(f"Article: {title}")
     print(f"Date: {date}")
