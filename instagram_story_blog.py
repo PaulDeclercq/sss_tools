@@ -48,11 +48,17 @@ BG_DARKEN = (245, 240, 234, 176)
 
 CTA_TEXT = "Read the full article"
 
+TITLE_MAX_LINES = 3
+TITLE_LINE_GAP = 14
+TITLE_FONT_SIZE = 68
+
+
 def get(url, xml=False):
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()
     return BeautifulSoup(response.text, "xml" if xml else "html.parser")
+
 
 def first_article_url():
     try:
@@ -73,6 +79,7 @@ def first_article_url():
             return urljoin(BLOG_URL, href)
 
     raise RuntimeError("Could not find latest article link")
+
 
 def parse_article(url):
     soup = get(url)
@@ -108,6 +115,7 @@ def parse_article(url):
 
     return title, date, image_url
 
+
 def format_date(date_str):
     if not date_str:
         return ""
@@ -124,6 +132,7 @@ def format_date(date_str):
     except Exception:
         return date_str
 
+
 def load_font(size, bold=False):
     candidates = [
         "/Library/Fonts/Arial Bold.ttf" if bold else "/Library/Fonts/Arial.ttf",
@@ -139,6 +148,7 @@ def load_font(size, bold=False):
             return ImageFont.truetype(path, size=size)
     return ImageFont.load_default()
 
+
 def fit_cover(img, target_w, target_h):
     src_w, src_h = img.size
     scale = max(target_w / src_w, target_h / src_h)
@@ -148,6 +158,7 @@ def fit_cover(img, target_w, target_h):
     left = (new_w - target_w) // 2
     top = (new_h - target_h) // 2
     return resized.crop((left, top, left + target_w, top + target_h))
+
 
 def build_background_from_image(hero):
     bg = (
@@ -159,17 +170,20 @@ def build_background_from_image(hero):
     bg.alpha_composite(overlay)
     return bg.convert("RGB")
 
+
 def download_image(url):
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()
     return Image.open(BytesIO(response.content)).convert("RGB")
 
+
 def rounded_mask(size, radius):
     mask = Image.new("L", size, 0)
     d = ImageDraw.Draw(mask)
     d.rounded_rectangle((0, 0, size[0], size[1]), radius=radius, fill=255)
     return mask
+
 
 def add_hero_with_shadow(base, hero, x, y, radius=36):
     shadow = Image.new("RGBA", base.size, (0, 0, 0, 0))
@@ -188,6 +202,7 @@ def add_hero_with_shadow(base, hero, x, y, radius=36):
     hero_layer.paste(hero_rgba, (x, y), mask)
     base = Image.alpha_composite(base, hero_layer)
     return base.convert("RGB")
+
 
 def add_hero_gradients(hero):
     hero = hero.convert("RGBA")
@@ -209,37 +224,25 @@ def add_hero_gradients(hero):
     hero = Image.alpha_composite(hero, overlay)
     return hero.convert("RGB")
 
-def smart_split_title(title):
-    title = " ".join(title.split())
-    if len(title) <= 46:
-        return title, ""
 
-    separators = [" – ", " — ", ": ", " | ", ", "]
-    for sep in separators:
-        if sep in title:
-            left, right = title.split(sep, 1)
-            if 18 <= len(left) <= 50:
-                return left.strip(), right.strip()
+def measure_text(draw, text, font):
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    return left, top, right, bottom, right - left, bottom - top
 
-    words = title.split()
-    if len(words) <= 4:
-        return title, ""
 
-    kicker = " ".join(words[:3])
-    main = " ".join(words[3:])
-    return kicker, main
+def wrap_text_keep_start(draw, text, font, max_width, max_lines=3):
+    words = " ".join(text.split()).split()
+    if not words:
+        return []
 
-def wrap_text(draw, text, font, max_width, max_lines=None):
-    words = text.split()
     lines = []
     current = ""
 
     for word in words:
-        test = word if not current else f"{current} {word}"
-        bbox = draw.textbbox((0, 0), test, font=font)
-        width = bbox[2] - bbox[0]
+        trial = word if not current else f"{current} {word}"
+        _, _, _, _, width, _ = measure_text(draw, trial, font)
         if width <= max_width:
-            current = test
+            current = trial
         else:
             if current:
                 lines.append(current)
@@ -248,37 +251,51 @@ def wrap_text(draw, text, font, max_width, max_lines=None):
     if current:
         lines.append(current)
 
-    if max_lines and len(lines) > max_lines:
-        lines = lines[:max_lines]
-        while True:
-            last = lines[-1] + "…"
-            bbox = draw.textbbox((0, 0), last, font=font)
-            if bbox[2] - bbox[0] <= max_width:
-                lines[-1] = last
-                break
-            trimmed = lines[-1].rsplit(" ", 1)[0]
-            if trimmed == lines[-1] or not trimmed:
-                lines[-1] = last
-                break
-            lines[-1] = trimmed
+    if len(lines) <= max_lines:
+        return lines
 
-    return lines
+    visible = lines[:max_lines]
+    last = visible[-1].rstrip()
+
+    while True:
+        candidate = last + "..."
+        _, _, _, _, width, _ = measure_text(draw, candidate, font)
+        if width <= max_width:
+            visible[-1] = candidate
+            break
+
+        shorter = last.rsplit(" ", 1)[0].rstrip()
+        if not shorter or shorter == last:
+            while last:
+                last = last[:-1].rstrip()
+                candidate = last + "..."
+                _, _, _, _, width, _ = measure_text(draw, candidate, font)
+                if width <= max_width:
+                    visible[-1] = candidate
+                    return visible
+            visible[-1] = "..."
+            return visible
+
+        last = shorter
+
+    return visible
+
 
 def draw_text_shadow(draw, xy, text, font, fill, shadow=(0, 0, 0), offset=2):
     x, y = xy
     draw.text((x + offset, y + offset), text, font=font, fill=shadow)
     draw.text((x, y), text, font=font, fill=fill)
 
+
 def draw_pill(draw, xy, text, font, bg, fg, pad_x=24, pad_y=14, radius=24):
     x, y = xy
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
+    left, top, right, bottom, tw, th = measure_text(draw, text, font)
     w = tw + pad_x * 2
     h = th + pad_y * 2
     draw.rounded_rectangle((x, y, x + w, y + h), radius=radius, fill=bg)
-    draw.text((x + pad_x, y + pad_y - 3), text, font=font, fill=fg)
+    draw.text((x + pad_x - left, y + pad_y - top), text, font=font, fill=fg)
     return w, h
+
 
 def draw_link_placeholder(draw, x, y, w, h):
     draw.rounded_rectangle(
@@ -303,6 +320,21 @@ def draw_link_placeholder(draw, x, y, w, h):
         width=4,
     )
 
+
+def draw_text_line_left(draw, x, y, text, font, fill):
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    draw.text((x - left, y - top), text, font=font, fill=fill)
+    return bottom - top
+
+
+def draw_multiline_from_start(draw, x, y, lines, font, fill, line_gap=14):
+    current_y = y
+    for line in lines:
+        h = draw_text_line_left(draw, x, current_y, line, font, fill)
+        current_y += h + line_gap
+    return current_y
+
+
 def main():
     article_url = first_article_url()
     title, date_str, image_url = parse_article(article_url)
@@ -322,18 +354,21 @@ def main():
 
     draw = ImageDraw.Draw(canvas)
 
-    site_font = load_font(34, bold=True)
     date_font = load_font(42, bold=True)
     kicker_font = load_font(40, bold=False)
-    title_font = load_font(78, bold=True)
+    title_font = load_font(TITLE_FONT_SIZE, bold=True)
     cta_font = load_font(44, bold=True)
 
     kicker = "JUST PUBLISHED"
-    _, main_title = smart_split_title(title)
-    if not main_title:
-        main_title = title
+    main_title = " ".join(title.split())
 
-    title_lines = wrap_text(draw, main_title, title_font, CONTENT_W, max_lines=3)
+    title_lines = wrap_text_keep_start(
+        draw,
+        main_title,
+        title_font,
+        CONTENT_W,
+        max_lines=TITLE_MAX_LINES,
+    )
 
     if date:
         date_y = HERO_Y + HERO_H - 120
@@ -348,17 +383,25 @@ def main():
 
     text_y = HERO_Y + HERO_H + 60
 
-    kicker_bbox = draw.textbbox((0, 0), kicker.upper(), font=kicker_font)
-    kicker_h = kicker_bbox[3] - kicker_bbox[1]
-    draw.text((CONTENT_X, text_y), kicker.upper(), font=kicker_font, fill=ACCENT)
+    kicker_h = draw_text_line_left(
+        draw,
+        CONTENT_X,
+        text_y,
+        kicker.upper(),
+        kicker_font,
+        ACCENT,
+    )
     text_y += kicker_h + 24
 
-    line_gap = 18
-    for line in title_lines:
-        bbox = draw.textbbox((0, 0), line, font=title_font)
-        lh = bbox[3] - bbox[1]
-        draw.text((CONTENT_X, text_y), line, font=title_font, fill=TEXT)
-        text_y += lh + line_gap
+    text_y = draw_multiline_from_start(
+        draw,
+        CONTENT_X,
+        text_y,
+        title_lines,
+        title_font,
+        TEXT,
+        line_gap=TITLE_LINE_GAP,
+    )
 
     bottom_safe_y = H - SAFE_BOTTOM
 
@@ -366,8 +409,7 @@ def main():
     sticker_h = 120
     cta_gap = 26
 
-    cta_measure_bbox = draw.textbbox((0, 0), CTA_TEXT, font=cta_font)
-    cta_text_h = cta_measure_bbox[3] - cta_measure_bbox[1]
+    _, _, _, _, _, cta_text_h = measure_text(draw, CTA_TEXT, cta_font)
     cta_h = cta_text_h + 18 * 2
 
     sticker_y = bottom_safe_y - sticker_h
@@ -392,6 +434,7 @@ def main():
     print(f"Article: {title}")
     print(f"Date: {date}")
     print(f"URL: {article_url}")
+
 
 if __name__ == "__main__":
     main()
