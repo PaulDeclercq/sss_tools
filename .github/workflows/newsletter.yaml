@@ -1,4 +1,4 @@
-name: NEWSLETTER Re-dispatch
+name: NEWSLETTER Dispatch
 
 on:
   workflow_dispatch:
